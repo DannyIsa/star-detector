@@ -31,45 +31,17 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 print("Loading star catalog and building SPHT like research project...")
 star_catalog = get_star_catalog()
 
-# Exact same setup as research project
-ursa_major_stars = [
-    { "B": "μ", "N": "Tania Australis", "C": "UMa", "Dec": "+41° 29′ 58″", "F": "34", "HR": "4069", "K": "3500", "RA": "10h 22m 19.7s", "V": "3.05" },
-    { "B": "λ", "N": "Tania Borealis", "C": "UMa", "Dec": "+42° 54′ 52″", "F": "33", "HR": "4033", "K": "9500", "RA": "10h 17m 05.8s", "V": "3.45" },
-    { "B": "θ", "N": "Sarir", "C": "UMa", "Dec": "+51° 40′ 38″", "F": "25", "HR": "3775", "K": "6600", "RA": "09h 32m 51.4s", "V": "3.17" },
-    { "B": "β", "N": "Merak", "C": "UMa", "Dec": "+56° 22′ 57″", "F": "48", "HR": "4295", "K": "9750", "RA": "11h 01m 50.5s", "V": "2.37" },
-    { "B": "ψ", "C": "UMa", "Dec": "+44° 29′ 55″", "F": "52", "HR": "4335", "K": "4850", "RA": "11h 09m 39.8s", "V": "3.01" },
-    { "B": "χ", "N": "Al Kaphrah", "C": "UMa", "Dec": "+47° 46′ 46″", "F": "63", "HR": "4518", "K": "5000", "RA": "11h 46m 03.0s", "V": "3.71" },
-    { "B": "γ", "N": "Phecda", "C": "UMa", "Dec": "+53° 41′ 41″", "F": "64", "HR": "4554", "K": "10000", "RA": "11h 53m 49.8s", "V": "2.44" },
-    { "B": "δ", "N": "Megrez", "C": "UMa", "Dec": "+57° 01′ 57″", "F": "69", "HR": "4660", "K": "9250", "RA": "12h 15m 25.6s", "V": "3.31" },
-    { "B": "ε", "N": "Alioth", "C": "UMa", "Dec": "+55° 57′ 35″", "F": "77", "HR": "4905", "K": "10000", "RA": "12h 54m 01.7s", "V": "1.77" },
-    { "B": "α", "N": "Dubhe", "C": "UMa", "Dec": "+61° 45′ 03″", "F": "50", "HR": "4301", "K": "5000", "RA": "11h 03m 43.7s", "V": "1.79" },
-    { "B": "υ", "C": "UMa", "Dec": "+59° 02′ 19″", "F": "29", "HR": "3888", "K": "7200", "RA": "09h 50m 59.4s", "V": "3.80" },
-    { "C": "UMa", "Dec": "+63° 03′ 43″", "F": "23", "HR": "3757", "K": "7500", "RA": "09h 31m 31.7s", "V": "3.67" },
-    { "B": "ο", "N": "Muscida", "C": "UMa", "Dec": "+60° 43′ 05″", "F": "1", "HR": "3323", "K": "5500", "RA": "08h 30m 15.9s", "V": "3.36" },
-    { "B": "η", "N": "Alkaid", "C": "UMa", "Dec": "+49° 18′ 48″", "F": "85", "HR": "5191", "K": "24000", "RA": "13h 47m 32.4s", "V": "1.86" },
-]
-
-# Build subset exactly like research project
-random.seed(42)
-subset_bsc = random.sample(star_catalog, 5)  # Take exactly 5 random stars
-
-# Add Ursa Major stars from the original BSC by HR value
-hr_values = set(str(star["HR"]) for star in ursa_major_stars)
-for star in star_catalog:
-    if str(star.get("HR")) in hr_values and star not in subset_bsc:
-        subset_bsc.append(star)
-
-print(f"Using subset of {len(subset_bsc)} stars for SPHT")
 
 # Try to load existing research SPHT, otherwise build it
-try:
-    spht = load_spht_from_json("spht_research.json")
-    print(f"Loaded research SPHT with {len(spht)} entries")
-except:
-    print("Building SPHT from subset...")
-    spht = build_spht_offline(subset_bsc, 1)  # al_parameter = 1
-    save_spht_to_json(spht, "spht_research.json")
-    print(f"Built and saved SPHT with {len(spht)} entries")
+# try:
+#     spht = load_spht_from_json("spht.json")
+#     print(f"Loaded SPHT with {len(spht)} entries")
+# except:
+print("Building reduced SPHT...")
+reduced_star_catalog = random.sample(star_catalog, 200)
+spht = build_spht_offline(reduced_star_catalog, 1)  # al_parameter = 1
+save_spht_to_json(spht, "spht.json")
+print(f"Built and saved SPHT with {len(spht)} entries")
 
 def allowed_file(filename):
     return '.' in filename and \

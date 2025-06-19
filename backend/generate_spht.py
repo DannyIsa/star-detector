@@ -13,7 +13,7 @@ def generate_spht():
     # Use a subset for faster processing (you can increase this for better accuracy)
     print("Creating subset of star catalog...")
     random.seed(42)
-    subset_bsc = random.sample(bsc, 200)  # Use 200 stars for good coverage
+    subset_bsc = random.sample(bsc, 500)  # Use 200 stars for good coverage
     
     print(f"Building SPHT from {len(subset_bsc)} stars...")
     al_parameter = 1
