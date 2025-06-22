@@ -83,17 +83,3 @@ The frontend will start on `http://localhost:3000`
    - Clicking the upload zone to browse and select a file
 4. **Click "Detect Stars"** to process the image
 5. **View the results** with detected stars marked and identified
-
-## 🔧 Technical Details
-
-### Frontend Technologies
-- React 19.1.0
-- Modern CSS with animations and gradients
-- Fetch API for backend communication
-
-### Backend Technologies
-- Flask 2.3.3
-- OpenCV for image processing
-- Pillow (PIL) for image manipulation
-- Flask-CORS for cross-origin requests
-- Base64 encoding for image transfer
