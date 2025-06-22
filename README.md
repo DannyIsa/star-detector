@@ -64,7 +64,7 @@ cd frontend
 
 2. Install dependencies:
 ```bash
-npm install --registry=https://registry.npmjs.org/ֿ
+npm install
 ```
 
 3. Start the development server:
