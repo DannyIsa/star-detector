@@ -23,8 +23,7 @@ star-ditector/
 │   └── package.json
 ├── backend/           # Python Flask API
 │   ├── app.py         # Main Flask application
-│   ├── requirements.txt
-│   └── README.md
+│   └── requirements.txt
 └── README.md
 ```
 
