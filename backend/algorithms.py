@@ -1,4 +1,4 @@
- ## Algorithms Module
+## Algorithms Module
 # This module contains the algorithms used in the project.
 import numpy
 from helper_functions import * 
@@ -92,23 +92,52 @@ def stars_identification_bf(detected_stars: List[dict],star_catalog: BSC,camera_
 
 # --- Algorithm 2 Implementation ---
 
+def is_valid_triplet_angular_distance(detected_stars_triplet: Tuple[dict, dict, dict], camera_scaling_factor: float, max_angular_distance: float = 45.0) -> bool:
+    """
+    Check if all pairwise angular distances in a triplet are within the specified threshold.
+    
+    Args:
+        detected_stars_triplet: Tuple of three star dictionaries with 'x' and 'y' coordinates
+        camera_scaling_factor: Factor to convert pixel distances to angular distances
+        max_angular_distance: Maximum allowed angular distance in degrees (default: 45.0)
+    
+    Returns:
+        bool: True if all pairwise distances are ≤ max_angular_distance, False otherwise
+    """
+    coords = [(s['x'], s['y']) for s in detected_stars_triplet]
+    p1, p2, p3 = coords
+    
+    # Calculate pixel distances and convert to angular distances
+    d12 = calculate_pixel_distance(p1[0], p1[1], p2[0], p2[1]) / camera_scaling_factor
+    d13 = calculate_pixel_distance(p1[0], p1[1], p3[0], p3[1]) / camera_scaling_factor  
+    d23 = calculate_pixel_distance(p2[0], p2[1], p3[0], p3[1]) / camera_scaling_factor
+    
+    # Check if all distances are within the threshold
+    return (d12 <= max_angular_distance and 
+            d13 <= max_angular_distance and 
+            d23 <= max_angular_distance)
+
 def stars_identification(
     detected_stars: List[dict[str, float]], # Original parameter name from your snippet
     spht: dict, 
     al_parameter: float, 
-    camera_scaling_factor: float
+    camera_scaling_factor: float,
+    max_angular_distance: float = 45.0
 ) -> List[dict[str, any]]: # Output: List of dicts, each with 'coords', 'spht_value', 'confidence'
     """
     Implements Algorithm 2 logic leading to Algorithm 4.
     Uses original list indices of detected_stars as temporary internal IDs.
     Calls setConfidence (Algorithm 4) function.
     Formats the output as requested: (x,y), spht_value, confidence for each star.
+    
+    Now includes filtering to only process triplets where all pairwise angular distances are ≤ max_angular_distance.
 
     Args:
         detected_stars: List of detected star dictionaries {'x': ..., 'y': ...}.
         spht: The Star Pattern Hash Table.
         al_parameter: Accuracy Level.
         camera_scaling_factor: Scaling factor.
+        max_angular_distance: Maximum allowed angular distance between stars in a triplet (default: 45.0 degrees).
     Returns:
         A list of dictionaries. Each dictionary represents an identified star and contains:
         - 'coords': (x, y) tuple of the original detected star.
@@ -141,9 +170,17 @@ def stars_identification(
     sm_table_for_individual_pixels_by_index = defaultdict(list) # Keys will be indices
 
     num_detected_stars = len(detected_stars) # Use the correct parameter name
+    triplets_processed = 0
+    triplets_filtered = 0
     
     for index_triplet in itertools.combinations(range(num_detected_stars), 3):
         frame_pixel_triplet_objects = tuple(detected_stars[i] for i in index_triplet) # Use correct param name
+        
+        # if not is_valid_triplet_angular_distance(frame_pixel_triplet_objects, camera_scaling_factor, max_angular_distance):
+        #     triplets_filtered += 1
+        #     continue
+            
+        triplets_processed += 1
         key = create_spht_key(frame_pixel_triplet_objects, al_parameter, camera_scaling_factor)
         matching_catalog_star_triplets = spht.get(key, [])
         if matching_catalog_star_triplets:
@@ -152,6 +189,8 @@ def stars_identification(
                     frame_pixel_original_index = index_triplet[i]
                     catalog_star_id = catalog_star_id_triplet[i]
                     sm_table_for_individual_pixels_by_index[frame_pixel_original_index].append(catalog_star_id)
+    
+    print(f"Triplets processed: {triplets_processed}, Triplets filtered out: {triplets_filtered}")
     
     # Call Algorithm 4 (setConfidence)
     confidence_results_by_index = setConfidence(sm_table_for_individual_pixels_by_index) 
@@ -171,8 +210,6 @@ def stars_identification(
         final_output_list.append(formatted_entry)
                     
     return final_output_list
-
-
 
 # --- Algorithm 3 Implementation ---
 
@@ -325,16 +362,6 @@ if __name__ == "__main__":
     # print(create_spht_key_offline(ad, al_parameter, camera_scaling_factor))
     
     star_catalog = [
-        # MOST STARS IN URSA MAJOR
-        { "B": "μ", "N": "Tania Australis", "C": "UMa", "Dec": "+41° 29′ 58″", "F": "34", "HR": "4069", "K": "3500", "RA": "10h 22m 19.7s", "V": "3.05" },
-        { "B": "λ", "N": "Tania Borealis", "C": "UMa", "Dec": "+42° 54′ 52″", "F": "33", "HR": "4033", "K": "9500", "RA": "10h 17m 05.8s", "V": "3.45" },
-        { "B": "θ", "N": "Sarir", "C": "UMa", "Dec": "+51° 40′ 38″", "F": "25", "HR": "3775", "K": "6600", "RA": "09h 32m 51.4s", "V": "3.17" },
-        { "B": "β", "N": "Merak", "C": "UMa", "Dec": "+56° 22′ 57″", "F": "48", "HR": "4295", "K": "9750", "RA": "11h 01m 50.5s", "V": "2.37" },
-        { "B": "ψ", "C": "UMa", "Dec": "+44° 29′ 55″", "F": "52", "HR": "4335", "K": "4850", "RA": "11h 09m 39.8s", "V": "3.01" },
-        { "B": "χ", "N": "Al Kaphrah", "C": "UMa", "Dec": "+47° 46′ 46″", "F": "63", "HR": "4518", "K": "5000", "RA": "11h 46m 03.0s", "V": "3.71" },
-        { "B": "γ", "N": "Phecda", "C": "UMa", "Dec": "+53° 41′ 41″", "F": "64", "HR": "4554", "K": "10000", "RA": "11h 53m 49.8s", "V": "2.44" },
-        { "B": "δ", "N": "Megrez", "C": "UMa", "Dec": "+57° 01′ 57″", "F": "69", "HR": "4660", "K": "9250", "RA": "12h 15m 25.6s", "V": "3.31" },
-        { "B": "ε", "N": "Alioth", "C": "UMa", "Dec": "+55° 57′ 35″", "F": "77", "HR": "4905", "K": "10000", "RA": "12h 54m 01.7s", "V": "1.77" },
         { "B": "α", "N": "Dubhe", "C": "UMa", "Dec": "+61° 45′ 03″", "F": "50", "HR": "4301", "K": "5000", "RA": "11h 03m 43.7s", "V": "1.79" },
         { "B": "υ", "C": "UMa", "Dec": "+59° 02′ 19″", "F": "29", "HR": "3888", "K": "7200", "RA": "09h 50m 59.4s", "V": "3.80" },
         { "C": "UMa", "Dec": "+63° 03′ 43″", "F": "23", "HR": "3757", "K": "7500", "RA": "09h 31m 31.7s", "V": "3.67" },
@@ -361,5 +388,5 @@ if __name__ == "__main__":
     # save_spht_to_json(spht, "spht.json")
     spht = load_spht_from_json("spht.json")
     # Execute online algorithm on ursa-major-reduced.png
-    result = stars_identification(detected_stars, spht , al_parameter, camera_scaling_factor)
+    result = stars_identification(detected_stars, spht, al_parameter, camera_scaling_factor, max_angular_distance=45.0)
     print(result)

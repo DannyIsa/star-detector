@@ -352,14 +352,60 @@ def compute_weighted_rms(valid_pairs, confidence_scores):
 
     return np.sqrt(sum(weighted_errors) / sum(weights))
 
-def build_spht_offline(bsc: dict, al_parameter: float=1) -> dict:
+def is_valid_catalog_triplet_angular_distance(bsc_triplet: Tuple[dict, dict, dict], max_angular_distance: float = 45.0) -> bool:
+    """
+    Check if all pairwise angular distances in a catalog star triplet are within the specified threshold.
+    
+    Args:
+        bsc_triplet: Tuple of three star dictionaries with 'RA' and 'Dec' coordinates
+        max_angular_distance: Maximum allowed angular distance in degrees (default: 45.0)
+    
+    Returns:
+        bool: True if all pairwise distances are ≤ max_angular_distance, False otherwise
+    """
+    s1, s2, s3 = bsc_triplet
+    
+    # Calculate angular distances between each pair
+    d12 = calculate_angular_distance(s1['RA'], s1['Dec'], s2['RA'], s2['Dec'])
+    d13 = calculate_angular_distance(s1['RA'], s1['Dec'], s3['RA'], s3['Dec']) 
+    d23 = calculate_angular_distance(s2['RA'], s2['Dec'], s3['RA'], s3['Dec'])
+    
+    # Check if all distances are within the threshold
+    return (d12 <= max_angular_distance and 
+            d13 <= max_angular_distance and 
+            d23 <= max_angular_distance)
+
+def build_spht_offline(bsc: dict, al_parameter: float=1, max_angular_distance: float = 45.0) -> dict:
+    """
+    Build SPHT (Star Pattern Hash Table) with angular distance filtering.
+    Only includes triplets where all pairwise angular distances are ≤ max_angular_distance.
+    
+    Args:
+        bsc: Star catalog
+        al_parameter: Accuracy level parameter (default: 1)
+        max_angular_distance: Maximum allowed angular distance between stars in a triplet (default: 45.0 degrees)
+    
+    Returns:
+        dict: SPHT with filtered triplets
+    """
     spht = {}
+    triplets_processed = 0
+    triplets_filtered = 0
+    
     for triplet in itertools.combinations(bsc, 3):
+        # Filter triplets based on angular distance constraint
+        # if not is_valid_catalog_triplet_angular_distance(triplet, max_angular_distance):
+        #     triplets_filtered += 1
+        #     continue
+            
+        triplets_processed += 1
         key = create_spht_key_offline(triplet, al_parameter)
         if key not in spht:
             spht[key] = []
         # Store the HR values (or another unique identifier) for the triplet
         spht[key].append(tuple(star.get("HR") for star in triplet))
+    
+    print(f"SPHT built: {triplets_processed} triplets processed, {triplets_filtered} triplets filtered out (>{max_angular_distance}°)")
     return spht
 
 def save_spht_to_json(spht: dict, filename: str) -> None:

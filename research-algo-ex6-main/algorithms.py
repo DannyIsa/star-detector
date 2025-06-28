@@ -92,23 +92,52 @@ def stars_identification_bf(detected_stars: List[dict],star_catalog: BSC,camera_
 
 # --- Algorithm 2 Implementation ---
 
+def is_valid_triplet_angular_distance(detected_stars_triplet: Tuple[dict, dict, dict], camera_scaling_factor: float, max_angular_distance: float = 45.0) -> bool:
+    """
+    Check if all pairwise angular distances in a triplet are within the specified threshold.
+    
+    Args:
+        detected_stars_triplet: Tuple of three star dictionaries with 'x' and 'y' coordinates
+        camera_scaling_factor: Factor to convert pixel distances to angular distances
+        max_angular_distance: Maximum allowed angular distance in degrees (default: 45.0)
+    
+    Returns:
+        bool: True if all pairwise distances are ≤ max_angular_distance, False otherwise
+    """
+    coords = [(s['x'], s['y']) for s in detected_stars_triplet]
+    p1, p2, p3 = coords
+    
+    # Calculate pixel distances and convert to angular distances
+    d12 = calculate_pixel_distance(p1[0], p1[1], p2[0], p2[1]) / camera_scaling_factor
+    d13 = calculate_pixel_distance(p1[0], p1[1], p3[0], p3[1]) / camera_scaling_factor  
+    d23 = calculate_pixel_distance(p2[0], p2[1], p3[0], p3[1]) / camera_scaling_factor
+    
+    # Check if all distances are within the threshold
+    return (d12 <= max_angular_distance and 
+            d13 <= max_angular_distance and 
+            d23 <= max_angular_distance)
+
 def stars_identification(
     detected_stars: List[dict[str, float]], # Original parameter name from your snippet
     spht: dict, 
     al_parameter: float, 
-    camera_scaling_factor: float
+    camera_scaling_factor: float,
+    max_angular_distance: float = 45.0  # New parameter for filtering - default maintains backwards compatibility
 ) -> List[dict[str, any]]: # Output: List of dicts, each with 'coords', 'spht_value', 'confidence'
     """
     Implements Algorithm 2 logic leading to Algorithm 4.
     Uses original list indices of detected_stars as temporary internal IDs.
     Calls setConfidence (Algorithm 4) function.
     Formats the output as requested: (x,y), spht_value, confidence for each star.
+    
+    Now includes filtering to only process triplets where all pairwise angular distances are ≤ max_angular_distance.
 
     Args:
         detected_stars: List of detected star dictionaries {'x': ..., 'y': ...}.
         spht: The Star Pattern Hash Table.
         al_parameter: Accuracy Level.
         camera_scaling_factor: Scaling factor.
+        max_angular_distance: Maximum allowed angular distance between stars in a triplet (default: 45.0 degrees).
     Returns:
         A list of dictionaries. Each dictionary represents an identified star and contains:
         - 'coords': (x, y) tuple of the original detected star.
@@ -141,9 +170,18 @@ def stars_identification(
     sm_table_for_individual_pixels_by_index = defaultdict(list) # Keys will be indices
 
     num_detected_stars = len(detected_stars) # Use the correct parameter name
+    triplets_processed = 0
+    triplets_filtered = 0
     
     for index_triplet in itertools.combinations(range(num_detected_stars), 3):
         frame_pixel_triplet_objects = tuple(detected_stars[i] for i in index_triplet) # Use correct param name
+        
+        # Filter triplets based on angular distance constraint
+        if not is_valid_triplet_angular_distance(frame_pixel_triplet_objects, camera_scaling_factor, max_angular_distance):
+            triplets_filtered += 1
+            continue
+            
+        triplets_processed += 1
         key = create_spht_key(frame_pixel_triplet_objects, al_parameter, camera_scaling_factor)
         matching_catalog_star_triplets = spht.get(key, [])
         if matching_catalog_star_triplets:
@@ -152,6 +190,8 @@ def stars_identification(
                     frame_pixel_original_index = index_triplet[i]
                     catalog_star_id = catalog_star_id_triplet[i]
                     sm_table_for_individual_pixels_by_index[frame_pixel_original_index].append(catalog_star_id)
+    
+    print(f"Triplets processed: {triplets_processed}, Triplets filtered out: {triplets_filtered}")
     
     # Call Algorithm 4 (setConfidence)
     confidence_results_by_index = setConfidence(sm_table_for_individual_pixels_by_index) 
@@ -171,8 +211,6 @@ def stars_identification(
         final_output_list.append(formatted_entry)
                     
     return final_output_list
-
-
 
 # --- Algorithm 3 Implementation ---
 

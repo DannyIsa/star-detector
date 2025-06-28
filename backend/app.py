@@ -108,16 +108,16 @@ def initialize_star_data():
     star_catalog = get_star_catalog()
     print(f"Loaded {len(star_catalog)} stars from main catalog")
     
-    print("Getting Ursa Major constellation data...")
-    ursa_major_stars = get_ursa_major_stars()
-    print(f"Prepared {len(ursa_major_stars)} key Ursa Major stars")
+    # print("Getting Ursa Major constellation data...")
+    # ursa_major_stars = get_ursa_major_stars()
+    # print(f"Prepared {len(ursa_major_stars)} key Ursa Major stars")
     
     # Create enhanced subset with Ursa Major stars
-    subset_bsc = create_enhanced_subset_optimized(star_catalog, ursa_major_stars)
+    # subset_bsc = create_enhanced_subset_optimized(star_catalog, ursa_major_stars)
     
-    # Build SPHT (Spherical Polar Hash Table)
-    print("Building SPHT (Spherical Polar Hash Table)...")
-    spht = build_spht_offline(subset_bsc, DEFAULT_AL_PARAMETER)
+    # Build SPHT (Spherical Polar Hash Table) with 45-degree filtering
+    print("Building SPHT (Spherical Polar Hash Table) with 45-degree angular distance filtering...")
+    spht = build_spht_offline(star_catalog, DEFAULT_AL_PARAMETER, max_angular_distance=45.0)
     save_spht_to_json(spht, SPHT_FILENAME)
     print(f"Built and saved SPHT with {len(spht)} entries")
     print("Star data initialization complete!")
@@ -153,14 +153,14 @@ def detect_stars_in_image(image_path):
         raise Exception(f"Star detection failed: {str(e)}")
 
 def identify_stars_using_spht(detected_stars, camera_scaling_factor, al_parameter):
-    """Identify detected stars using SPHT algorithm"""
     try:
-        print("Identifying stars using SPHT algorithm...")
+        print("Identifying stars using SPHT algorithm with angular distance filtering...")
         identified_stars = stars_identification(
             detected_stars, 
             spht, 
             al_parameter, 
-            camera_scaling_factor
+            camera_scaling_factor,
+            max_angular_distance=45.0
         )
         
         print(f"Identified {len(identified_stars)} stars")
