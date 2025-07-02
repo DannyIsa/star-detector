@@ -41,63 +41,13 @@ star_catalog = None
 subset_bsc = None
 spht = None
 
-def get_ursa_major_stars():
-    """
-    Get the key Ursa Major constellation stars with numeric coordinates.
-    These are the major stars including the Big Dipper.
-    Returns stars in the same format as the main catalog for direct use.
-    """
-    return [
-        {"B": "μ", "N": "Tania Australis", "C": "UMa", "HR": 4069, "RA": 155.58208, "Dec": 41.49944, "V": 3.05, "K": 3500, "F": "34"},
-        {"B": "λ", "N": "Tania Borealis", "C": "UMa", "HR": 4033, "RA": 154.27417, "Dec": 42.91444, "V": 3.45, "K": 9500, "F": "33"},
-        {"B": "θ", "N": "Sarir", "C": "UMa", "HR": 3775, "RA": 143.21417, "Dec": 51.67722, "V": 3.17, "K": 6600, "F": "25"},
-        {"B": "β", "N": "Merak", "C": "UMa", "HR": 4295, "RA": 165.46042, "Dec": 56.38250, "V": 2.37, "K": 9750, "F": "48"},
-        {"B": "ψ", "C": "UMa", "HR": 4335, "RA": 167.41583, "Dec": 44.49861, "V": 3.01, "K": 4850, "F": "52"},
-        {"B": "χ", "N": "Al Kaphrah", "C": "UMa", "HR": 4518, "RA": 176.51250, "Dec": 47.77944, "V": 3.71, "K": 5000, "F": "63"},
-        {"B": "γ", "N": "Phecda", "C": "UMa", "HR": 4554, "RA": 178.45750, "Dec": 53.69472, "V": 2.44, "K": 10000, "F": "64"},
-        {"B": "δ", "N": "Megrez", "C": "UMa", "HR": 4660, "RA": 183.85667, "Dec": 57.03250, "V": 3.31, "K": 9250, "F": "69"},
-        {"B": "ε", "N": "Alioth", "C": "UMa", "HR": 4905, "RA": 193.50708, "Dec": 55.95972, "V": 1.77, "K": 10000, "F": "77"},
-        {"B": "α", "N": "Dubhe", "C": "UMa", "HR": 4301, "RA": 165.93208, "Dec": 61.75083, "V": 1.79, "K": 5000, "F": "50"},
-        {"B": "υ", "C": "UMa", "HR": 3888, "RA": 147.74750, "Dec": 59.03861, "V": 3.80, "K": 7200, "F": "29"},
-        {"C": "UMa", "HR": 3757, "RA": 142.88208, "Dec": 63.06194, "V": 3.67, "K": 7500, "F": "23"},
-        {"B": "ο", "N": "Muscida", "C": "UMa", "HR": 3323, "RA": 127.56625, "Dec": 60.71806, "V": 3.36, "K": 5500, "F": "1"},
-        {"B": "η", "N": "Alkaid", "C": "UMa", "HR": 5191, "RA": 206.88500, "Dec": 49.31333, "V": 1.86, "K": 24000, "F": "85"},
-    ]
+def create_reduced_catalog(main_catalog, subset_size=REDUCED_CATALOG_SIZE):
+    print(f"Creating reduced catalog with {subset_size} stars...")
+    return random.sample(main_catalog, subset_size)
 
-def create_enhanced_subset_optimized(main_catalog, ursa_major_stars, subset_size=REDUCED_CATALOG_SIZE):
-    """
-    Create an enhanced subset by directly adding Ursa Major stars with numeric coordinates.
-    Much faster than the previous approach since we don't need to loop through main catalog.
-    
-    Args:
-        main_catalog: Full star catalog
-        ursa_major_stars: List of Ursa Major star data (now with numeric coordinates)
-        subset_size: Target size for the subset
-    
-    Returns:
-        Enhanced subset with Ursa Major stars guaranteed to be included
-    """
-    print(f"Creating optimized enhanced subset with {subset_size} stars...")
-    
-    # Start with random sample
-    subset = random.sample(main_catalog, subset_size)
-    
-    # Create a set of existing HR numbers for quick lookup
-    existing_hr_numbers = {star.get('HR') for star in subset}
-    
-    # Directly add missing Ursa Major stars (no need to search main catalog!)
-    added_count = 0
-    for ursa_star in ursa_major_stars:
-        hr_number = ursa_star.get('HR')
-        if hr_number not in existing_hr_numbers:
-            subset.append(ursa_star)
-            existing_hr_numbers.add(hr_number)
-            added_count += 1
-    
-    print(f"Directly added {added_count} Ursa Major stars to subset")
-    print(f"Final subset size: {len(subset)} stars")
-    
-    return subset
+def spht_file_exists():
+    """Check if SPHT file already exists"""
+    return os.path.exists(SPHT_FILENAME)
 
 def initialize_star_data():
     """Initialize star catalog and build SPHT for star identification"""
@@ -107,19 +57,21 @@ def initialize_star_data():
     print("Loading main star catalog...")
     star_catalog = get_star_catalog()
     print(f"Loaded {len(star_catalog)} stars from main catalog")
+    # star_catalog = create_reduced_catalog(star_catalog) # uncomment this to use a reduced catalog
     
-    # print("Getting Ursa Major constellation data...")
-    # ursa_major_stars = get_ursa_major_stars()
-    # print(f"Prepared {len(ursa_major_stars)} key Ursa Major stars")
+    # Check if SPHT file already exists
+    if spht_file_exists():
+        print(f"SPHT file '{SPHT_FILENAME}' already exists. Loading from file...")
+        spht = load_spht_from_json(SPHT_FILENAME)
+        print(f"Loaded existing SPHT with {len(spht)} entries")
+    else:
+        print(f"SPHT file '{SPHT_FILENAME}' not found. Building new SPHT...")
+        # Build SPHT (Spherical Polar Hash Table) with 45-degree filtering
+        print("Building SPHT (Spherical Polar Hash Table)")
+        spht = build_spht_offline(star_catalog, DEFAULT_AL_PARAMETER, max_angular_distance=45.0)
+        save_spht_to_json(spht, SPHT_FILENAME)
+        print(f"Built and saved SPHT with {len(spht)} entries")
     
-    # Create enhanced subset with Ursa Major stars
-    # subset_bsc = create_enhanced_subset_optimized(star_catalog, ursa_major_stars)
-    
-    # Build SPHT (Spherical Polar Hash Table) with 45-degree filtering
-    print("Building SPHT (Spherical Polar Hash Table) with 45-degree angular distance filtering...")
-    spht = build_spht_offline(star_catalog, DEFAULT_AL_PARAMETER, max_angular_distance=45.0)
-    save_spht_to_json(spht, SPHT_FILENAME)
-    print(f"Built and saved SPHT with {len(spht)} entries")
     print("Star data initialization complete!")
 
 def allowed_file(filename):
