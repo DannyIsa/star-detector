@@ -118,7 +118,7 @@ def calculate_rms_error_eq1(
 
 def create_spht_key(pixel_triplet_coords: Tuple[dict, dict, dict], al_parameter: float, camera_scaling_factor: float) -> tuple:
     """
-    Calculates pairwise distances, sorts, scales, rounds, and returns an SPHT key.
+    Calculates pairwise distances, sorts, rounds, scales, and returns an SPHT key.
     Args:
         pixel_triplet_coords: Tuple of three star dicts, e.g., ({'x':x1,'y':y1,'id':'p1'}, ...)
                               It's better if these dicts also have a unique 'id' for hashability.
@@ -128,44 +128,39 @@ def create_spht_key(pixel_triplet_coords: Tuple[dict, dict, dict], al_parameter:
     Returns:
         A tuple representing the SPHT key.
     """
-    # Ensure pixel_triplet_coords provides (x,y) for distance calculation
-    # This is a placeholder - actual implementation is complex
     coords = [(s['x'], s['y']) for s in pixel_triplet_coords]
-    
     p1, p2, p3 = coords
     d12 = calculate_pixel_distance(p1[0], p1[1], p2[0], p2[1]) / camera_scaling_factor
     d13 = calculate_pixel_distance(p1[0], p1[1], p3[0], p3[1]) / camera_scaling_factor
     d23 = calculate_pixel_distance(p2[0], p2[1], p3[0], p3[1]) / camera_scaling_factor
-    
-    pixel_distances = sorted((d12, d13, d23))
-    
-    key = tuple((d * al_parameter) for d in pixel_distances) # This rounding must match SPHT key generation exactly
-    rounded_key = tuple(round(d, 0) for d in key) # Round to 6 decimal places
-    return tuple(sorted(rounded_key)) # Ensure sorted if SPHT keys are always sorted
+
+    rounded_d12 = round(d12 * al_parameter)
+    rounded_d13 = round(d13 * al_parameter)
+    rounded_d23 = round(d23 * al_parameter)
+
+    key = tuple(sorted([rounded_d12, rounded_d13, rounded_d23]))
+    return key
 
 def create_spht_key_offline(bsc_triplet_coords: Tuple[dict, dict, dict], al_parameter: float) -> tuple:
     """
-    Calculates pairwise distances, sorts, scales, rounds, and returns an SPHT key.
+    Calculates pairwise distances, sorts, rounds, scales, and returns an SPHT key.
     Args:
-        pixel_triplet_coords: Tuple of three star dicts, e.g., ({'x':x1,'y':y1,'id':'p1'}, ...)
-                              It's better if these dicts also have a unique 'id' for hashability.
-                              Or pass tuples of (x,y) directly if they are used as keys.
+        bsc_triplet_coords: Tuple of three star dicts from the catalog.
         al_parameter: Accuracy level.
-        camera_scaling_factor: Scaling factor.
     Returns:
         A tuple representing the SPHT key.
     """
-    # Ensure pixel_triplet_coords provides (x,y) for distance calculation
-    # This is a placeholder - actual implementation is complex
     coords = [(s['Dec'], s['RA']) for s in bsc_triplet_coords]
-    p1, p2, p3 = coords #index 0 = dec, index 1 = ra
-    d12 = calculate_angular_distance(p1[1], p1[0], p2[1], p2[0]) 
-    d13 = calculate_angular_distance(p1[1], p1[0], p3[1], p3[0]) 
-    d23 = calculate_angular_distance(p2[1], p2[0], p3[1], p3[0]) 
-    ang_distances = sorted((d12, d13, d23))
-    key = tuple((d * al_parameter) for d in ang_distances) 
-    rounded_key = tuple(round(d, 0) for d in key) 
-    return tuple(sorted(rounded_key)) # Ensure sorted if SPHT keys are always sorted
+    p1, p2, p3 = coords  # index 0 = dec, index 1 = ra
+    d12 = calculate_angular_distance(p1[1], p1[0], p2[1], p2[0])
+    d13 = calculate_angular_distance(p1[1], p1[0], p3[1], p3[0])
+    d23 = calculate_angular_distance(p2[1], p2[0], p3[1], p3[0])
+
+    rounded_d12 = round(d12 * al_parameter)
+    rounded_d13 = round(d13 * al_parameter)
+    rounded_d23 = round(d23 * al_parameter)
+    key = tuple(sorted([rounded_d12, rounded_d13, rounded_d23]))
+    return key
 
 def detect_stars(image_path):
     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)

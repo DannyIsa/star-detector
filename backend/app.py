@@ -40,17 +40,86 @@ os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 star_catalog = None
 subset_bsc = None
 spht = None
+available_sphts = {}  # Dictionary to store multiple SPHTs {name: spht_data}
 
 def create_reduced_catalog(main_catalog, subset_size=REDUCED_CATALOG_SIZE):
-    print(f"Creating reduced catalog with {subset_size} stars...")
-    return random.sample(main_catalog, subset_size)
+    print(f"Creating reduced catalog with {subset_size} brightest stars...")
+    
+    # Sort stars by visual magnitude (V parameter) - lower values = brighter stars
+    # Filter out stars without V parameter first
+    stars_with_magnitude = [star for star in main_catalog if 'V' in star and star['V'] is not None]
+    
+    if not stars_with_magnitude:
+        print("Warning: No stars with magnitude data found, using first stars in catalog")
+        return main_catalog[:subset_size]
+    
+    # Sort by V magnitude (ascending - brightest first)
+    try:
+        sorted_stars = sorted(stars_with_magnitude, key=lambda star: float(star['V']))
+        selected_stars = sorted_stars[:subset_size]
+        
+        print(f"Selected stars with magnitudes from {selected_stars[0]['V']} to {selected_stars[-1]['V']}")
+        return selected_stars
+        
+    except (ValueError, TypeError) as e:
+        print(f"Error sorting by magnitude: {e}, falling back to first {subset_size} stars")
+        return main_catalog[:subset_size]
 
 def spht_file_exists():
     """Check if SPHT file already exists"""
     return os.path.exists(SPHT_FILENAME)
 
+def get_spht_filename(al_parameter):
+    """Generate SPHT filename based on AL parameter"""
+    return f"spht_al_{al_parameter}.json"
+
+def load_available_sphts():
+    """Load all available SPHT files and populate available_sphts dictionary"""
+    global available_sphts
+    available_sphts = {}
+    
+    # Load default SPHT only if it exists
+    if spht_file_exists():
+        try:
+            default_spht = load_spht_from_json(SPHT_FILENAME)
+            available_sphts["default"] = {
+                "spht": default_spht,
+                "al_parameter": DEFAULT_AL_PARAMETER,
+                "filename": SPHT_FILENAME,
+                "created": "default",
+                "catalog_size": len(star_catalog)  # Default uses full catalog
+            }
+            print(f"Loaded default SPHT with {len(default_spht)} entries")
+        except Exception as e:
+            print(f"Error loading default SPHT: {e}")
+    
+    # Look for custom SPHT files
+    import glob
+    spht_files = glob.glob("spht_al_*.json")
+    for filename in spht_files:
+        try:
+            # Extract AL parameter from filename
+            al_param = float(filename.replace("spht_al_", "").replace(".json", ""))
+            custom_spht = load_spht_from_json(filename)
+            spht_name = f"AL_{al_param}"
+            available_sphts[spht_name] = {
+                "spht": custom_spht,
+                "al_parameter": al_param,
+                "filename": filename,
+                "created": "custom",
+                "catalog_size": REDUCED_CATALOG_SIZE  # Default for legacy files
+            }
+            print(f"Loaded custom SPHT '{spht_name}' with {len(custom_spht)} entries")
+        except Exception as e:
+            print(f"Error loading custom SPHT {filename}: {e}")
+    
+    if len(available_sphts) == 0:
+        print("No SPHT files found. Generate SPHTs using the frontend interface.")
+    else:
+        print(f"Loaded {len(available_sphts)} SPHT configurations")
+
 def initialize_star_data():
-    """Initialize star catalog and build SPHT for star identification"""
+    """Initialize star catalog and load existing SPHTs (without auto-generating)"""
     global star_catalog, subset_bsc, spht
     
     print("Initializing Star Detector API...")
@@ -59,18 +128,17 @@ def initialize_star_data():
     print(f"Loaded {len(star_catalog)} stars from main catalog")
     # star_catalog = create_reduced_catalog(star_catalog) # uncomment this to use a reduced catalog
     
-    # Check if SPHT file already exists
+    # Load default SPHT if it exists, but don't create it automatically
     if spht_file_exists():
-        print(f"SPHT file '{SPHT_FILENAME}' already exists. Loading from file...")
+        print(f"Loading existing default SPHT from '{SPHT_FILENAME}'...")
         spht = load_spht_from_json(SPHT_FILENAME)
-        print(f"Loaded existing SPHT with {len(spht)} entries")
+        print(f"Loaded default SPHT with {len(spht)} entries")
     else:
-        print(f"SPHT file '{SPHT_FILENAME}' not found. Building new SPHT...")
-        # Build SPHT (Spherical Polar Hash Table) with 45-degree filtering
-        print("Building SPHT (Spherical Polar Hash Table)")
-        spht = build_spht_offline(star_catalog, DEFAULT_AL_PARAMETER, max_angular_distance=45.0)
-        save_spht_to_json(spht, SPHT_FILENAME)
-        print(f"Built and saved SPHT with {len(spht)} entries")
+        print(f"No default SPHT found. Use the frontend to generate SPHTs as needed.")
+        spht = None
+    
+    # Load all available SPHTs
+    load_available_sphts()
     
     print("Star data initialization complete!")
 
@@ -104,12 +172,16 @@ def detect_stars_in_image(image_path):
     except Exception as e:
         raise Exception(f"Star detection failed: {str(e)}")
 
-def identify_stars_using_spht(detected_stars, camera_scaling_factor, al_parameter):
+def identify_stars_using_spht(detected_stars, camera_scaling_factor, al_parameter, selected_spht=None):
     try:
         print("Identifying stars using SPHT algorithm with angular distance filtering...")
+        
+        # Use selected SPHT or default
+        spht_to_use = selected_spht if selected_spht is not None else spht
+        
         identified_stars = stars_identification(
             detected_stars, 
-            spht, 
+            spht_to_use, 
             al_parameter, 
             camera_scaling_factor,
             max_angular_distance=45.0
@@ -154,7 +226,7 @@ def create_annotated_image(image_path, identified_stars):
         raise Exception(f"Image annotation failed: {str(e)}")
 
 def process_star_identification(image_path, camera_scaling_factor=DEFAULT_CAMERA_SCALING_FACTOR, 
-                              al_parameter=DEFAULT_AL_PARAMETER):
+                              al_parameter=DEFAULT_AL_PARAMETER, spht_name="default"):
     """
     Complete star identification pipeline
     
@@ -162,6 +234,7 @@ def process_star_identification(image_path, camera_scaling_factor=DEFAULT_CAMERA
         image_path: Path to the uploaded image
         camera_scaling_factor: Camera calibration parameter
         al_parameter: Algorithm parameter
+        spht_name: Name of the SPHT to use
     
     Returns:
         tuple: (annotated_image, identified_stars, error_message)
@@ -170,10 +243,18 @@ def process_star_identification(image_path, camera_scaling_factor=DEFAULT_CAMERA
         # Step 1: Detect stars using computer vision
         detected_stars = detect_stars_in_image(image_path)
         
-        # Step 2: Identify stars using SPHT algorithm
-        identified_stars = identify_stars_using_spht(detected_stars, camera_scaling_factor, al_parameter)
+        # Step 2: Get the appropriate SPHT
+        selected_spht = None
+        if spht_name != "default" and spht_name in available_sphts:
+            selected_spht = available_sphts[spht_name]["spht"]
+            # Use the AL parameter from the SPHT if not explicitly provided
+            if al_parameter == DEFAULT_AL_PARAMETER:
+                al_parameter = available_sphts[spht_name]["al_parameter"]
         
-        # Step 3: Create annotated visualization
+        # Step 3: Identify stars using SPHT algorithm
+        identified_stars = identify_stars_using_spht(detected_stars, camera_scaling_factor, al_parameter, selected_spht)
+        
+        # Step 4: Create annotated visualization
         annotated_image = create_annotated_image(image_path, identified_stars)
         
         return annotated_image, identified_stars, None
@@ -221,9 +302,12 @@ def home():
     """API home endpoint with service information"""
     return jsonify({
         "message": "Star Detector API is running!",
-        "version": "1.0",
+        "version": "2.0",
         "endpoints": {
             "/upload": "POST - Upload an image for star identification",
+            "/generate-spht": "POST - Generate a new SPHT with custom AL parameter",
+            "/list-sphts": "GET - List all available SPHTs",
+            "/delete-spht": "POST - Delete a custom SPHT",
             "/health": "GET - Health check and service status"
         }
     })
@@ -236,8 +320,154 @@ def health():
         "service": "star-detector-api",
         "stars_loaded": len(star_catalog) if star_catalog else 0,
         "subset_stars": len(subset_bsc) if subset_bsc else 0,
-        "spht_entries": len(spht) if spht else 0
+        "spht_entries": len(spht) if spht else 0,
+        "available_sphts": len(available_sphts)
     })
+
+@app.route('/generate-spht', methods=['POST'])
+def generate_spht():
+    """
+    Generate a new SPHT with custom AL parameter
+    
+    Expected JSON data:
+        - al_parameter: float - The AL parameter for SPHT generation
+        - name: string (optional) - Custom name for the SPHT
+        - catalog_size: int (optional) - Number of stars to use from catalog (default: 200)
+    
+    Returns:
+        JSON response with generation status
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'al_parameter' not in data:
+            return jsonify({'error': 'al_parameter is required'}), 400
+        
+        al_parameter = float(data['al_parameter'])
+        custom_name = data.get('name', f"AL_{al_parameter}")
+        catalog_size = int(data.get('catalog_size', REDUCED_CATALOG_SIZE))
+        
+        if al_parameter <= 0:
+            return jsonify({'error': 'al_parameter must be positive'}), 400
+        
+        if catalog_size <= 0 or catalog_size > len(star_catalog):
+            return jsonify({'error': f'catalog_size must be between 1 and {len(star_catalog)}'}), 400
+        
+        # Generate filename
+        filename = get_spht_filename(al_parameter)
+        
+        # Check if SPHT already exists
+        if custom_name in available_sphts:
+            return jsonify({'error': f'SPHT with name "{custom_name}" already exists'}), 400
+        
+        print(f"Building new SPHT with AL parameter: {al_parameter}, using {catalog_size} stars")
+        
+        # Create reduced catalog if needed
+        working_catalog = star_catalog
+        if catalog_size < len(star_catalog):
+            working_catalog = create_reduced_catalog(star_catalog, catalog_size)
+            print(f"Using reduced catalog with {len(working_catalog)} stars")
+        
+        # Build the SPHT
+        new_spht = build_spht_offline(working_catalog, al_parameter, max_angular_distance=45.0)
+        
+        # Save to file
+        save_spht_to_json(new_spht, filename)
+        
+        # Add to available SPHTs
+        available_sphts[custom_name] = {
+            "spht": new_spht,
+            "al_parameter": al_parameter,
+            "filename": filename,
+            "created": "custom",
+            "catalog_size": catalog_size
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': f'SPHT "{custom_name}" generated successfully',
+            'spht_name': custom_name,
+            'al_parameter': al_parameter,
+            'catalog_size': catalog_size,
+            'filename': filename,
+            'entries': len(new_spht)
+        })
+        
+    except ValueError as e:
+        return jsonify({'error': f'Invalid input: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@app.route('/list-sphts', methods=['GET'])
+def list_sphts():
+    """
+    List all available SPHTs
+    
+    Returns:
+        JSON response with list of available SPHTs
+    """
+    try:
+        sphts_info = []
+        for name, info in available_sphts.items():
+            sphts_info.append({
+                'name': name,
+                'al_parameter': info['al_parameter'],
+                'catalog_size': info.get('catalog_size', 'Unknown'),
+                'entries': len(info['spht']),
+                'created': info['created'],
+                'filename': info['filename']
+            })
+        
+        return jsonify({
+            'success': True,
+            'sphts': sphts_info,
+            'total': len(sphts_info),
+            'max_catalog_size': len(star_catalog)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@app.route('/delete-spht', methods=['POST'])
+def delete_spht():
+    """
+    Delete a custom SPHT
+    
+    Expected JSON data:
+        - name: string - Name of the SPHT to delete
+    
+    Returns:
+        JSON response with deletion status
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'name' not in data:
+            return jsonify({'error': 'SPHT name is required'}), 400
+        
+        spht_name = data['name']
+        
+        if spht_name == "default":
+            return jsonify({'error': 'Cannot delete default SPHT'}), 400
+        
+        if spht_name not in available_sphts:
+            return jsonify({'error': f'SPHT "{spht_name}" not found'}), 404
+        
+        # Get filename and delete file
+        filename = available_sphts[spht_name]['filename']
+        if os.path.exists(filename):
+            os.remove(filename)
+        
+        # Remove from available SPHTs
+        del available_sphts[spht_name]
+        
+        return jsonify({
+            'success': True,
+            'message': f'SPHT "{spht_name}" deleted successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -248,6 +478,7 @@ def upload_file():
         - file: Image file
         - camera_scaling_factor (optional): Camera calibration parameter  
         - al_parameter (optional): Algorithm parameter
+        - spht_name (optional): Name of the SPHT to use
     
     Returns:
         JSON response with identified stars and annotated image
@@ -265,9 +496,26 @@ def upload_file():
         if not allowed_file(file.filename):
             return jsonify({'error': f'File type not allowed. Supported formats: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
         
+        # Check if any SPHTs are available
+        if len(available_sphts) == 0:
+            return jsonify({'error': 'No SPHT algorithms available. Please generate an SPHT first using the SPHT Manager.'}), 400
+        
         # Get processing parameters
         camera_scaling_factor = float(request.form.get('camera_scaling_factor', DEFAULT_CAMERA_SCALING_FACTOR))
         al_parameter = float(request.form.get('al_parameter', DEFAULT_AL_PARAMETER))
+        spht_name = request.form.get('spht_name', 'default')
+        
+        # If default is requested but doesn't exist, use the first available SPHT
+        if spht_name == 'default' and 'default' not in available_sphts:
+            if len(available_sphts) > 0:
+                spht_name = list(available_sphts.keys())[0]
+                print(f"Default SPHT not found, using '{spht_name}' instead")
+            else:
+                return jsonify({'error': 'No SPHT algorithms available. Please generate an SPHT first.'}), 400
+        
+        # Validate SPHT selection
+        if spht_name not in available_sphts:
+            return jsonify({'error': f'SPHT "{spht_name}" not found. Available SPHTs: {list(available_sphts.keys())}'}), 400
         
         # Save uploaded file
         filename = secure_filename(file.filename)
@@ -276,7 +524,7 @@ def upload_file():
         
         # Process the image through star identification pipeline
         processed_image, identified_stars, error = process_star_identification(
-            upload_path, camera_scaling_factor, al_parameter
+            upload_path, camera_scaling_factor, al_parameter, spht_name
         )
         
         if processed_image is None:
@@ -295,7 +543,8 @@ def upload_file():
             'detected_stars': stars_list,
             'parameters': {
                 'camera_scaling_factor': camera_scaling_factor,
-                'al_parameter': al_parameter
+                'al_parameter': al_parameter,
+                'spht_name': spht_name
             },
             'stats': {
                 'total_identified': len(identified_stars),
