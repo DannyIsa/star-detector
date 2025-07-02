@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 
+// Backend Configuration - Change these URLs to point to your backend
+const BACKEND_CONFIG = 'http://localhost:5001';
+
 function App() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [processedImage, setProcessedImage] = useState(null);
@@ -26,7 +29,7 @@ function App() {
 
   const loadAvailableSphts = async () => {
     try {
-      const response = await fetch('http://localhost:5001/list-sphts');
+      const response = await fetch(`${BACKEND_CONFIG}/list-sphts`);
       const data = await response.json();
       
       if (data.success) {
@@ -79,7 +82,7 @@ function App() {
         requestData.name = newSphtName.trim();
       }
 
-      const response = await fetch('http://localhost:5001/generate-spht', {
+      const response = await fetch(`${BACKEND_CONFIG}/generate-spht`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,7 +126,7 @@ function App() {
     }
 
     try {
-      const response = await fetch('http://localhost:5001/delete-spht', {
+      const response = await fetch(`${BACKEND_CONFIG}/delete-spht`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -189,7 +192,7 @@ function App() {
     }
 
     try {
-      const response = await fetch('http://localhost:5001/upload', {
+      const response = await fetch(`${BACKEND_CONFIG}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -500,7 +503,8 @@ function App() {
             </div>
 
             <div className="stars-list">
-              <h3>Identified Stars:</h3>
+              <h3>Identified Stars ({detectedStars.length}):</h3>
+              
               <div className="stars-grid">
                 {detectedStars.map((star, index) => (
                   <div key={index} className="star-card">

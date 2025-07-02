@@ -291,10 +291,51 @@ def format_stars_for_response(identified_stars):
             "confidence": confidence
         })
     
+    # Remove duplicates - keep only the highest confidence for each star
+    stars_list = remove_duplicate_stars(stars_list)
+    
     # Sort by confidence in descending order (highest confidence first)
     stars_list.sort(key=lambda star: star['confidence'], reverse=True)
     
     return stars_list
+
+def remove_duplicate_stars(stars_list):
+    """
+    Remove duplicate star classifications, keeping only the one with highest confidence.
+    Handles cases where the same star appears 2, 3, or more times.
+    
+    Args:
+        stars_list: List of star dictionaries with 'hr', 'confidence', etc.
+    
+    Returns:
+        List with duplicates removed, keeping highest confidence entries
+    """
+    if not stars_list:
+        return stars_list
+    
+    # Group stars by HR number (catalog ID)
+    star_groups = {}
+    
+    for star in stars_list:
+        hr_number = star['hr']
+        
+        if hr_number not in star_groups:
+            star_groups[hr_number] = []
+        
+        star_groups[hr_number].append(star)
+    
+    # Process each group - keep only the highest confidence
+    unique_stars = []
+    for hr_number, star_group in star_groups.items():
+        if len(star_group) > 1:
+            # Keep the one with highest confidence
+            best_star = max(star_group, key=lambda s: s['confidence'])
+            unique_stars.append(best_star)
+        else:
+            # No duplicates for this star
+            unique_stars.append(star_group[0])
+    
+    return unique_stars
 
 # API Routes
 @app.route('/')
@@ -538,7 +579,7 @@ def upload_file():
         
         return jsonify({
             'success': True,
-            'message': f'Successfully identified {len(identified_stars)} stars in image',
+            'message': f'Successfully identified {len(stars_list)} stars in image',
             'processed_image': f'data:image/png;base64,{img_base64}',
             'detected_stars': stars_list,
             'parameters': {
@@ -547,7 +588,7 @@ def upload_file():
                 'spht_name': spht_name
             },
             'stats': {
-                'total_identified': len(identified_stars),
+                'total_identified': len(stars_list),
                 'filename': filename
             }
         })
@@ -566,4 +607,4 @@ if __name__ == '__main__':
         initialize_star_data()
     
     print("Starting Flask server on http://0.0.0.0:5001")
-    app.run(debug=True, host='0.0.0.0', port=5001) 
+    app.run(debug=True, host='0.0.0.0', port=5001)
